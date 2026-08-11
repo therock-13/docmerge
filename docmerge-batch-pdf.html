@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docmerge · Batch PDFs</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+<style>
+  :root{
+    --red:#e0393e; --red-dark:#c22e33; --bg:#faf9fb; --panel:#ffffff;
+    --border:#f0d9da; --border2:#e8e8ee; --text:#2b2b33; --muted:#8a8a96;
+    --green:#2ecc71; --pink-bg:#fff5f5;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text);}
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:10px 20px; background:#fff; border-bottom:1px solid var(--border2); }
+  .topbar .brand{display:flex; align-items:center; gap:10px;}
+  .brand .logo{ width:30px; height:30px; border-radius:8px; background:linear-gradient(135deg,var(--red),#8b2fc9); }
+  .brand .name{font-weight:800; font-size:1rem;}
+  .brand .tagline{font-size:.72rem; color:var(--muted); margin-top:1px;}
+  .topbar .actions{display:flex; align-items:center; gap:10px;}
+  .saved-pill{font-size:.72rem; color:var(--green); background:#eafaf0; padding:4px 10px; border-radius:20px;}
+  .btn-red{ background:var(--red); color:#fff; border:none; padding:9px 16px; border-radius:8px; font-weight:700; font-size:.82rem; cursor:pointer; }
+  .btn-red:hover{background:var(--red-dark);}
+  .btn-red:disabled{opacity:.4; cursor:not-allowed;}
+  .status-wrap{padding:16px 20px 0;}
+  .status-card{ background:var(--pink-bg); border:1px solid var(--border); border-radius:14px; padding:14px 18px; }
+  .status-top{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .status-top .title{font-weight:800; font-size:.95rem;}
+  .status-top .meta{font-size:.78rem; color:var(--muted);}
+  .status-row{display:flex; align-items:center; justify-content:space-between; margin-top:10px; flex-wrap:wrap; gap:10px;}
+  .chips{display:flex; gap:8px; flex-wrap:wrap;}
+  .chip-step{ font-size:.72rem; padding:4px 10px; border-radius:20px; background:#fff; border:1px solid var(--border2); color:var(--muted); }
+  .chip-step.active{background:var(--red); border-color:var(--red); color:#fff; font-weight:700;}
+  .chip-step.done{background:#eafaf0; border-color:#c8f0d8; color:#2a9d5c;}
+  .status-counts{font-size:.78rem; color:var(--muted);}
+  .layout{display:flex; gap:0; align-items:flex-start; padding:16px 20px 60px;}
+  .sidebar{ width:320px; flex-shrink:0; background:#fff; border:1px solid var(--border2); border-radius:14px; padding:16px; margin-right:16px; max-height:calc(100vh - 40px); overflow-y:auto; position:sticky; top:16px; }
+  .step{padding:14px 0; border-bottom:1px solid var(--border2);}
+  .step:last-of-type{border-bottom:none;}
+  .step-head{display:flex; align-items:center; gap:8px; margin-bottom:4px;}
+  .step-num{ width:20px; height:20px; border-radius:50%; background:var(--red); color:#fff; font-size:.7rem; display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0; }
+  .step-title{font-weight:700; font-size:.85rem;}
+  .step-optional{font-size:.68rem; color:var(--muted); font-weight:500;}
+  .step-desc{font-size:.72rem; color:var(--muted); margin:4px 0 8px; line-height:1.5;}
+  .sidebar input[type=text], .sidebar input[type=file], .sidebar textarea{ width:100%; border:1px solid var(--border2); border-radius:8px; padding:8px 10px; font-size:.82rem; font-family:inherit; background:#fafafa; }
+  .sidebar textarea{min-height:64px; resize:vertical;}
+  .word-row{display:flex; gap:6px; margin-bottom:6px; align-items:center;}
+  .word-row input{flex:1; min-width:0;}
+  .word-row button{background:none; border:none; color:var(--muted); cursor:pointer; font-size:.9rem;}
+  .link-btn{background:none; border:none; color:var(--red); font-size:.76rem; cursor:pointer; padding:2px 0; font-weight:600;}
+  .hint-small{font-size:.7rem; color:var(--muted); margin-top:6px; line-height:1.5;}
+  .full-btn{ width:100%; background:var(--red); color:#fff; border:none; padding:9px; border-radius:8px; font-weight:700; font-size:.82rem; cursor:pointer; margin-top:8px; }
+  .full-btn.outline{background:#fff; border:1px solid var(--red); color:var(--red);}
+  .full-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .create-btn{ width:100%; background:var(--red); color:#fff; border:none; padding:13px; border-radius:10px; font-weight:800; font-size:.9rem; cursor:pointer; margin-top:16px; }
+  .main{flex:1; min-width:0;}
+  .field-card{background:#fff; border:1px solid var(--border2); border-radius:14px; padding:18px; margin-bottom:16px;}
+  .field-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
+  .field-head-left{display:flex; align-items:center; gap:8px;}
+  .field-title{font-weight:800; font-size:.82rem; letter-spacing:.4px; color:#5a5a66; text-transform:uppercase;}
+  #titleInput{ width:100%; border:1.5px solid var(--red); border-radius:8px; padding:12px 14px; font-size:1rem; font-weight:600; font-family:inherit; }
+  .slider-row{display:flex; align-items:center; gap:10px; margin-top:12px;}
+  .slider-row input[type=range]{flex:1; accent-color:var(--red);}
+  .slider-row .pt-label{font-size:.75rem; color:var(--muted); min-width:34px; text-align:right;}
+  .field-hint{font-size:.72rem; color:var(--muted); margin-top:8px; line-height:1.5;}
+  #descInput{ width:100%; min-height:280px; border:1px solid var(--border2); border-radius:8px; padding:14px; font-size:.92rem; font-family:inherit; line-height:1.6; resize:vertical; }
+  .empty-note{font-size:.8rem; color:var(--muted); text-align:center; padding:20px 0;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="logo"></div>
+    <div>
+      <div class="name">Docmerge</div>
+      <div class="tagline">Batch PDFs — swap names and words across one document and export a personalized PDF for each</div>
+    </div>
+  </div>
+  <div class="actions">
+    <span class="saved-pill" id="savedPill">Saved just now</span>
+  </div>
+</div>
+
+<div class="status-wrap">
+  <div class="status-card">
+    <div class="status-top">
+      <div class="title" id="batchHeadline">Batch not run yet</div>
+      <div class="meta" id="batchMeta">0 replacements · 0ms elapsed</div>
+    </div>
+    <div class="status-row">
+      <div class="chips" id="stepChips">
+        <span class="chip-step" data-step="queued">Queued</span>
+        <span class="chip-step" data-step="processing">Processing</span>
+        <span class="chip-step" data-step="generating">Generating PDFs</span>
+        <span class="chip-step" data-step="zipping">Preparing</span>
+        <span class="chip-step" data-step="ready">Ready</span>
+      </div>
+      <div class="status-counts" id="statusCounts">0/0 generated · 0 failed</div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+
+  <div class="sidebar">
+    <div class="step">
+      <div class="step-head"><span class="step-num">1</span><span class="step-title">PDF Upload</span><span class="step-optional">— Optional</span></div>
+      <div class="step-desc">Upload a PDF to pull its text into the Title/Description box, edit it there.</div>
+      <input type="file" id="pdfUpload" accept=".pdf" onchange="handlePdfUpload(event)">
+      <div class="hint-small" id="pdfUploadStatus"></div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><span class="step-num">2</span><span class="step-title">Word / Find & Replace</span><span class="step-optional">— Optional</span></div>
+      <div class="step-desc">Swap any word or phrase across the Title and Description before generating.</div>
+      <div id="wordRows"></div>
+      <button class="link-btn" onclick="addWordRow()">+ Add another word</button>
+      <button class="full-btn outline" onclick="applyWordReplace()">Replace</button>
+      <div class="hint-small" id="wordStatus">Set the words above, then hit Replace to apply the swap.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><span class="step-num">3</span><span class="step-title">Replacement Numbers</span><span class="step-optional">— Optional</span></div>
+      <div class="step-desc">10–15 digit numbers get auto-detected. Symbols/breaks kept as-is.</div>
+      <textarea id="numberTargets" placeholder="+55198325-9118"></textarea>
+      <button class="full-btn outline" onclick="applyNumberReplace()">Preview Replace</button>
+      <div class="hint-small" id="numberStatus">No 10–15 digit number found to replace.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><span class="step-num">4</span><span class="step-title">Original Name</span></div>
+      <div class="step-desc">Name to replace — every occurrence swapped per PDF.</div>
+      <input type="text" id="originalName" placeholder="e.g. arsdecaa">
+    </div>
+
+    <div class="step">
+      <div class="step-head"><span class="step-num">5</span><span class="step-title">Replacement Names</span></div>
+      <div class="step-desc">One per line — one PDF gets created per name.</div>
+      <textarea id="replacementNames" placeholder="Copa
+Delta"></textarea>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><span class="step-num">6</span><span class="step-title">Output PDF Names</span></div>
+      <div class="step-desc">One per line, same order as Replacement Names.</div>
+      <textarea id="outputNames" placeholder="copa-certificate
+delta-certificate"></textarea>
+      <div class="hint-small" id="namesCountHint">0 replacement names · 0 output names</div>
+    </div>
+
+    <button class="create-btn" id="convertAllBtn2" onclick="convertAll()">⬇️ Generate &amp; Download All PDFs</button>
+    <div class="hint-small" style="text-align:center; margin-top:6px;">Word replace → Number replace → sabhi names ke PDFs banayega, phir har PDF seedha alag-alag download hogi — koi ZIP nahi, text selectable rahega, emoji colourful rahenge, aur file size chhota rahega.</div>
+  </div>
+
+  <div class="main">
+    <div class="field-card">
+      <div class="field-head">
+        <div class="field-head-left">
+          <span class="step-num" style="background:var(--red);">1</span>
+          <span class="field-title">Title</span>
+        </div>
+        <button class="btn-red" onclick="downloadSinglePreview()">Download PDF</button>
+      </div>
+      <input type="text" id="titleInput" placeholder="e.g. Certificate of Appreciation" oninput="livePreview()">
+      <div class="slider-row">
+        <input type="range" id="titleFontSize" min="12" max="40" value="20" oninput="livePreview()">
+        <span class="pt-label" id="titleFontLabel">20pt</span>
+      </div>
+      <div class="field-hint">Shown at the top of every PDF, in its own size.</div>
+    </div>
+
+    <div class="field-card">
+      <div class="field-head-left">
+        <span class="step-num" style="background:var(--red);">2</span>
+        <span class="field-title">Description</span>
+      </div>
+      <textarea id="descInput" placeholder="Exactly what you paste here is exactly what appears in every PDF." oninput="livePreview()"></textarea>
+      <div class="field-hint">Text stays real/selectable text (small file size). Emoji (🎉✅➡️❤️) are drawn as small full-colour glyphs, not black outlines.</div>
+    </div>
+
+    <div class="field-card" style="text-align:center;">
+      <button class="btn-red" id="convertAllBtn" style="width:100%; padding:16px; font-size:1rem;" onclick="convertAll()">⚙️ Convert All &amp; Download PDFs</button>
+      <div class="field-hint" id="convertAllStatus">Word replace → Number replace → sabhi names ke PDFs banayega, phir har PDF seedha download hogi. Selectable text + colourful emoji, chhota file size.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { PDFDocument, rgb } = PDFLib;
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+let generatedFiles = []; // {name, blob}
+
+/* ================= FONT + EMOJI SETUP =================
+   Hybrid approach (same idea as headless-Chrome "print to PDF" tools):
+     - Normal text -> embedded Noto Sans font, drawn as REAL vector text
+       (selectable, searchable, tiny file size).
+     - Emoji characters -> small colour PNG glyphs (Twemoji, from a CDN),
+       drawn as inline images at the emoji's exact position and size.
+   This keeps file size in the KB range while emoji stay full-colour. */
+let fontsReady = null;
+async function loadFonts(){
+  if(fontsReady) return fontsReady;
+  fontsReady = (async () => {
+    const [sansBytes, boldBytes] = await Promise.all([
+      fetch('https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Regular.ttf').then(r=>r.arrayBuffer()),
+      fetch('https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Bold.ttf').then(r=>r.arrayBuffer())
+    ]);
+    return { sansBytes, boldBytes };
+  })();
+  return fontsReady;
+}
+
+// Cache of fetched emoji PNGs (as PNG bytes) keyed by codepoint sequence,
+// so repeated emoji across a batch are only downloaded once.
+const emojiImageCache = new Map();
+
+function toCodepoints(str){
+  const cps = [];
+  for(const ch of Array.from(str)) cps.push(ch.codePointAt(0).toString(16));
+  return cps.join('-');
+}
+
+async function fetchEmojiPng(cluster){
+  const key = toCodepoints(cluster);
+  if(emojiImageCache.has(key)) return emojiImageCache.get(key);
+  const url = `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/72x72/${key}.png`;
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('not found');
+    const bytes = await res.arrayBuffer();
+    emojiImageCache.set(key, bytes);
+    return bytes;
+  }catch(e){
+    emojiImageCache.set(key, null);
+    return null;
+  }
+}
+
+const EMOJI_TEST = /\p{Extended_Pictographic}/u;
+
+function segmentText(text){
+  const segments = [];
+  let segmenter = null;
+  if(typeof Intl !== 'undefined' && Intl.Segmenter){
+    segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  }
+  let clusters;
+  if(segmenter){
+    clusters = Array.from(segmenter.segment(text), s => s.segment);
+  } else {
+    clusters = Array.from(text);
+  }
+  let buffer = '';
+  clusters.forEach(cluster=>{
+    if(EMOJI_TEST.test(cluster) && cluster.trim() !== ''){
+      if(buffer){ segments.push({type:'text', value:buffer}); buffer=''; }
+      segments.push({type:'emoji', value:cluster});
+    } else {
+      buffer += cluster;
+    }
+  });
+  if(buffer) segments.push({type:'text', value:buffer});
+  return segments;
+}
+
+/* ---------------- SAVED PILL ---------------- */
+function touchSaved(){
+  const el = document.getElementById('savedPill');
+  const t = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  el.textContent = 'Saved ' + t;
+}
+document.addEventListener('input', touchSaved);
+
+/* ---------------- LIVE PREVIEW ---------------- */
+function livePreview(){
+  const size = document.getElementById('titleFontSize').value;
+  document.getElementById('titleFontLabel').textContent = size + 'pt';
+}
+document.getElementById('titleInput').value = 'Certificate of Appreciation';
+document.getElementById('descInput').value = 'This certificate is proudly presented to {name} in recognition of outstanding contribution. 🎉\n\nContact: 9876543210';
+livePreview();
+
+/* ---------------- STEP 1: PDF UPLOAD (text extraction) ---------------- */
+async function handlePdfUpload(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('pdfUploadStatus');
+  statusEl.textContent = 'Reading PDF...';
+  try{
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    let fullText = '';
+    for(let i=1;i<=pdf.numPages;i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(it=>it.str).join(' ');
+      fullText += pageText + '\n\n';
+    }
+    document.getElementById('descInput').value = fullText.trim();
+    if(!document.getElementById('titleInput').value){
+      document.getElementById('titleInput').value = file.name.replace(/\.pdf$/i,'');
+    }
+    statusEl.textContent = `✅ Extracted text from ${pdf.numPages} page(s).`;
+    livePreview();
+  }catch(err){
+    statusEl.textContent = '⚠️ Could not read this PDF: ' + err.message;
+  }
+}
+
+/* ---------------- STEP 2: WORD / FIND & REPLACE ---------------- */
+function addWordRow(find='', replace=''){
+  const wrap = document.getElementById('wordRows');
+  const row = document.createElement('div');
+  row.className='word-row';
+  row.innerHTML = `
+    <input type="text" placeholder="find" value="${find}">
+    <input type="text" placeholder="replace with" value="${replace}">
+    <button onclick="this.parentElement.remove()">✕</button>`;
+  wrap.appendChild(row);
+}
+addWordRow('americas air','copa airlines');
+
+function applyWordReplace(){
+  const rows = document.querySelectorAll('#wordRows .word-row');
+  let title = document.getElementById('titleInput').value;
+  let desc = document.getElementById('descInput').value;
+  let count = 0;
+  rows.forEach(row=>{
+    const inputs = row.querySelectorAll('input');
+    const find = inputs[0].value;
+    const replace = inputs[1].value;
+    if(!find) return;
+    const pattern = find.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const re = new RegExp(pattern, 'gi');
+    const m1 = (title.match(re)||[]).length;
+    const m2 = (desc.match(re)||[]).length;
+    count += m1+m2;
+    title = title.replace(re, replace);
+    desc = desc.replace(re, replace);
+  });
+  document.getElementById('titleInput').value = title;
+  document.getElementById('descInput').value = desc;
+  document.getElementById('wordStatus').textContent = `${count} occurrences replaced.`;
+  livePreview();
+}
+
+/* ---------------- STEP 3: NUMBER REPLACE (digit-skeleton) ---------------- */
+const NUMBER_PATTERN = /\+?\d(?:[^\da-zA-Z\u0900-\u097F]{0,3}\d){9,14}/gu;
+
+function detectNumberMatches(text){
+  const broad = text.match(NUMBER_PATTERN) || [];
+  return broad.filter(m => {
+    const d = m.replace(/\D/gu,'').length;
+    return d>=10 && d<=15;
+  });
+}
+function replaceNumberSkeleton(match, replacementDigits){
+  let ptr = 0;
+  let out = '';
+  for(const ch of Array.from(match)){
+    if(/\d/u.test(ch)){
+      if(ptr < replacementDigits.length){ out += replacementDigits[ptr]; ptr++; }
+    } else {
+      out += ch;
+    }
+  }
+  if(ptr < replacementDigits.length) out += replacementDigits.slice(ptr);
+  return out;
+}
+function applyNumberReplace(){
+  const targetsRaw = document.getElementById('numberTargets').value;
+  const targets = targetsRaw.split('\n').map(t=>t.trim()).filter(Boolean).map(t=>t.replace(/\D/g,''));
+  let title = document.getElementById('titleInput').value;
+  let desc = document.getElementById('descInput').value;
+
+  const matches = detectNumberMatches(title+'\n'+desc);
+  if(matches.length===0){
+    document.getElementById('numberStatus').textContent = 'No 10–15 digit number found to replace.';
+    return;
+  }
+  if(targets.length===0){
+    document.getElementById('numberStatus').textContent = `${matches.length} number(s) detected — add at least one replacement above.`;
+    return;
+  }
+  let idx = 0;
+  function replaceAllIn(text){
+    return text.replace(NUMBER_PATTERN, (m)=>{
+      const d = m.replace(/\D/gu,'').length;
+      if(d<10 || d>15) return m;
+      const rep = replaceNumberSkeleton(m, targets[idx % targets.length]);
+      idx++;
+      return rep;
+    });
+  }
+  title = replaceAllIn(title);
+  desc = replaceAllIn(desc);
+  document.getElementById('titleInput').value = title;
+  document.getElementById('descInput').value = desc;
+  document.getElementById('numberStatus').textContent = `All ${matches.length} number(s) replaced.`;
+  livePreview();
+}
+
+/* ---------------- STEP 5/6: NAMES COUNT HINT ---------------- */
+function updateNamesHint(){
+  const names = document.getElementById('replacementNames').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const outs = document.getElementById('outputNames').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  document.getElementById('namesCountHint').textContent = `${names.length} replacement name(s) · ${outs.length} output name(s)`;
+}
+['input','keyup','change','paste'].forEach(evt=>{
+  document.getElementById('replacementNames').addEventListener(evt, ()=>setTimeout(updateNamesHint,0));
+  document.getElementById('outputNames').addEventListener(evt, ()=>setTimeout(updateNamesHint,0));
+});
+updateNamesHint();
+
+/* ---------------- STEP CHIPS / STATUS ---------------- */
+function setStep(stepKey, doneKeys=[]){
+  document.querySelectorAll('.chip-step').forEach(chip=>{
+    chip.classList.remove('active','done');
+    if(doneKeys.includes(chip.dataset.step)) chip.classList.add('done');
+    if(chip.dataset.step===stepKey) chip.classList.add('active');
+  });
+}
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* ================= HYBRID TEXT + EMOJI LAYOUT ================= */
+
+function segmentWidth(seg, font, size){
+  if(seg.type==='text') return font.widthOfTextAtSize(seg.value, size);
+  return size;
+}
+
+function wrapMixedParagraph(paragraph, font, size, maxWidth){
+  if(paragraph.trim()===''){ return [[]]; }
+  const segments = segmentText(paragraph);
+
+  const tokens = [];
+  segments.forEach(seg=>{
+    if(seg.type==='emoji'){
+      tokens.push({type:'emoji', value:seg.value});
+    } else {
+      const words = seg.value.split(/(\s+)/).filter(w=>w.length>0);
+      words.forEach(w=> tokens.push({type:'text', value:w}));
+    }
+  });
+
+  const lines = [];
+  let currentLine = [];
+  let currentWidth = 0;
+  tokens.forEach(tok=>{
+    const w = segmentWidth(tok, font, size);
+    if(currentWidth + w > maxWidth && currentLine.length>0){
+      lines.push(currentLine);
+      currentLine = [];
+      currentWidth = 0;
+      if(tok.type==='text' && tok.value.trim()===''){ return; }
+    }
+    currentLine.push(tok);
+    currentWidth += w;
+  });
+  if(currentLine.length>0) lines.push(currentLine);
+  return lines;
+}
+
+function wrapMixedText(text, font, size, maxWidth){
+  const paragraphs = text.split('\n');
+  const allLines = [];
+  paragraphs.forEach(p=>{
+    wrapMixedParagraph(p, font, size, maxWidth).forEach(l=>allLines.push(l));
+  });
+  return allLines;
+}
+
+const embeddedEmojiCache = new WeakMap();
+async function embedEmojiOnce(pdfDoc, cluster){
+  let cache = embeddedEmojiCache.get(pdfDoc);
+  if(!cache){ cache = new Map(); embeddedEmojiCache.set(pdfDoc, cache); }
+  if(cache.has(cluster)) return cache.get(cluster);
+  const bytes = await fetchEmojiPng(cluster);
+  if(!bytes){ cache.set(cluster, null); return null; }
+  try{
+    const img = await pdfDoc.embedPng(bytes);
+    cache.set(cluster, img);
+    return img;
+  }catch(e){
+    cache.set(cluster, null);
+    return null;
+  }
+}
+
+async function drawMixedLine(pdfDoc, page, tokens, x, y, size, font, color){
+  let cursorX = x;
+  for(const tok of tokens){
+    if(tok.type==='text'){
+      page.drawText(tok.value, {x:cursorX, y, size, font, color});
+      cursorX += font.widthOfTextAtSize(tok.value, size);
+    } else {
+      const img = await embedEmojiOnce(pdfDoc, tok.value);
+      if(img){
+        page.drawImage(img, {x:cursorX, y: y - size*0.12, width:size, height:size});
+      }
+      cursorX += size;
+    }
+  }
+}
+
+async function preEmbedAllEmoji(pdfDoc, ...texts){
+  const clusters = new Set();
+  texts.forEach(t=>{
+    segmentText(t).forEach(seg=>{ if(seg.type==='emoji') clusters.add(seg.value); });
+  });
+  await Promise.all(Array.from(clusters).map(c=> embedEmojiOnce(pdfDoc, c)));
+}
+
+async function buildSinglePdf(title, description, titleSize){
+  const { sansBytes, boldBytes } = await loadFonts();
+
+  const pdfDoc = await PDFDocument.create();
+  pdfDoc.registerFontkit(fontkit);
+  let page = pdfDoc.addPage([595.28, 841.89]); // A4
+
+  const fontRegular = await pdfDoc.embedFont(sansBytes, { subset: true });
+  const fontBold = await pdfDoc.embedFont(boldBytes, { subset: true });
+
+  await preEmbedAllEmoji(pdfDoc, title, description);
+
+  const margin = 56;
+  const pageWidth = 595.28;
+  const maxWidth = pageWidth - margin*2;
+  let y = 841.89 - margin;
+
+  const titleLines = wrapMixedText(title, fontBold, Number(titleSize), maxWidth);
+  for(const line of titleLines){
+    await drawMixedLine(pdfDoc, page, line, margin, y, Number(titleSize), fontBold, rgb(0.1,0.1,0.12));
+    y -= Number(titleSize)*1.3;
+  }
+  y -= 14;
+
+  const bodySize = 12;
+  const bodyLines = wrapMixedText(description, fontRegular, bodySize, maxWidth);
+  for(const line of bodyLines){
+    if(y < margin+20){
+      page = pdfDoc.addPage([595.28, 841.89]);
+      y = 841.89 - margin;
+    }
+    await drawMixedLine(pdfDoc, page, line, margin, y, bodySize, fontRegular, rgb(0.15,0.15,0.18));
+    y -= bodySize*1.5;
+  }
+
+  const bytes = await pdfDoc.save();
+  return new Blob([bytes], {type:'application/pdf'});
+}
+
+/* ---------------- CREATE PDFs (batch) ---------------- */
+async function createPdfs(){
+  const startTime = performance.now();
+  const baseTitle = document.getElementById('titleInput').value || 'Untitled';
+  const baseDesc = document.getElementById('descInput').value || '';
+  const titleSize = document.getElementById('titleFontSize').value;
+  const originalName = document.getElementById('originalName').value.trim();
+  const names = document.getElementById('replacementNames').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const outNames = document.getElementById('outputNames').value.split('\n').map(s=>s.trim()).filter(Boolean);
+
+  if(names.length===0){
+    alert('Kam se kam ek Replacement Name do (Step 5)');
+    return;
+  }
+
+  generatedFiles = [];
+
+  setStep('queued');
+  document.getElementById('batchHeadline').textContent = 'Batch running...';
+  await sleep(200);
+
+  setStep('processing', ['queued']);
+  document.getElementById('batchHeadline').textContent = 'Loading fonts...';
+  await loadFonts();
+  await sleep(150);
+
+  setStep('generating', ['queued','processing']);
+  document.getElementById('batchHeadline').textContent = 'Batch running...';
+
+  let totalReplacements = 0;
+  let generatedCount = 0;
+  let failed = 0;
+
+  for(let i=0;i<names.length;i++){
+    const name = names[i];
+    const outName = (outNames[i] || name.toLowerCase().replace(/\s+/g,'-')) .replace(/\.pdf$/i,'') + '.pdf';
+
+    let title = baseTitle;
+    let desc = baseDesc;
+
+    if(originalName){
+      const pattern = originalName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      const re = new RegExp(pattern, 'gi');
+      const c1 = (title.match(re)||[]).length;
+      const c2 = (desc.match(re)||[]).length;
+      totalReplacements += c1+c2;
+      title = title.replace(re, name);
+      desc = desc.replace(re, name);
+    }
+    title = title.split('{name}').join(name);
+    desc = desc.split('{name}').join(name);
+
+    try{
+      const blob = await buildSinglePdf(title, desc, titleSize);
+      generatedFiles.push({name: outName, blob});
+      generatedCount++;
+    }catch(err){
+      failed++;
+      console.error('PDF generation failed for', outName, err);
+    }
+
+    document.getElementById('statusCounts').textContent = `${generatedCount}/${names.length} generated · ${failed} failed`;
+    await sleep(50);
+  }
+
+  if(generatedCount===0){
+    alert('Koi bhi PDF generate nahi ho payi. Browser console (F12) mein exact error dekho.');
+  }
+
+  setStep('zipping', ['queued','processing','generating']);
+  document.getElementById('batchHeadline').textContent = 'Preparing downloads...';
+  await sleep(150);
+
+  setStep('ready', ['queued','processing','generating','zipping']);
+  const elapsed = Math.round(performance.now()-startTime);
+  document.getElementById('batchHeadline').textContent = 'Batch ready';
+  document.getElementById('batchMeta').textContent = `${totalReplacements} name replacements · ${elapsed}ms elapsed`;
+  document.getElementById('statusCounts').textContent = `${generatedCount}/${names.length} generated · ${failed} failed`;
+}
+
+/* Downloads every generated PDF individually — no ZIP is ever created. */
+async function downloadAllPdfs(){
+  if(generatedFiles.length===0){
+    alert('Pehle PDFs generate karo.');
+    return;
+  }
+  const statusEl = document.getElementById('convertAllStatus');
+  for(let i=0;i<generatedFiles.length;i++){
+    const f = generatedFiles[i];
+    statusEl.textContent = `⏳ Downloading ${i+1}/${generatedFiles.length}: ${f.name}`;
+    const url = URL.createObjectURL(f.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = f.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=> URL.revokeObjectURL(url), 5000);
+    await sleep(400);
+  }
+}
+
+async function convertAll(){
+  const btn = document.getElementById('convertAllBtn');
+  const btn2 = document.getElementById('convertAllBtn2');
+  const statusEl = document.getElementById('convertAllStatus');
+  btn.disabled = true; btn2.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = '⏳ Converting...';
+
+  try{
+    applyWordReplace();
+    applyNumberReplace();
+    await createPdfs();
+    if(generatedFiles.length>0){
+      await downloadAllPdfs();
+      statusEl.textContent = `✅ Done — ${generatedFiles.length} PDF(s) downloaded directly. Selectable text, colourful emoji, small size.`;
+    } else {
+      statusEl.textContent = '⚠️ Koi PDF generate nahi hui.';
+    }
+  }catch(err){
+    statusEl.textContent = '⚠️ Kuch galat hua: ' + err.message;
+  }finally{
+    btn.disabled = false; btn2.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+/* ---------------- SINGLE PREVIEW DOWNLOAD ---------------- */
+async function downloadSinglePreview(){
+  const title = document.getElementById('titleInput').value || 'Untitled';
+  const desc = document.getElementById('descInput').value || '';
+  const size = document.getElementById('titleFontSize').value;
+  const blob = await buildSinglePdf(title, desc, size);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = (title.toLowerCase().replace(/\s+/g,'-')||'document') + '.pdf'; a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
